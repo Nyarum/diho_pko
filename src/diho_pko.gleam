@@ -2,6 +2,7 @@ import birl.{
   type Month, Apr, Aug, Dec, Feb, Jan, Jul, Jun, Mar, May, Nov, Oct, Sep,
 }
 
+import bytes/pack
 import gleam/bit_array
 import gleam/bytes_builder
 import gleam/erlang/process.{type Selector}
