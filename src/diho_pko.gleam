@@ -70,11 +70,9 @@ fn first_date_packet() -> BitArray {
     |> bit_array.from_string
 
   let prefinal_bytes =
-    <<128:size(32)>>
+    <<80:little-size(32)>>
     |> bit_array.append(<<940:size(16)>>)
     |> bit_array.append(date_bytes)
-
-  io.debug(bit_array.byte_size(prefinal_bytes))
 
   let final_bytes =
     <<bit_array.byte_size(prefinal_bytes):size(16)>>
@@ -84,6 +82,8 @@ fn first_date_packet() -> BitArray {
 }
 
 pub fn main() {
+  io.debug(bytes_builder.from_bit_array(first_date_packet()))
+
   let assert Ok(_) =
     glisten.handler(
       fn(conn) {
