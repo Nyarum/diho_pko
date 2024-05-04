@@ -1,89 +1,22 @@
-import birl.{
-  type Month, Apr, Aug, Dec, Feb, Jan, Jul, Jun, Mar, May, Nov, Oct, Sep,
-}
-
 import bytes/pack
-import gleam/bit_array
+import bytes/packet.{Unpack}
 import gleam/bytes_builder
-import gleam/erlang/process.{type Selector}
+import gleam/erlang/process
 import gleam/int
 import gleam/io
-import gleam/list
-import gleam/option.{None, Some}
-import gleam/order
+import gleam/option.{None}
 import gleam/otp/actor
-import gleam/result
 import gleam/string
 import glisten.{Packet}
-
-fn first_date_packet() -> BitArray {
-  let now = birl.now()
-  let day = birl.get_day(now)
-  let time = birl.get_time_of_day(now)
-
-  let month = case int.compare(day.month, 10) {
-    order.Lt -> "0" <> int.to_string(day.month)
-    _ -> int.to_string(day.month)
-  }
-
-  let day = case int.compare(day.date, 10) {
-    order.Lt -> "0" <> int.to_string(day.date)
-    _ -> int.to_string(day.date)
-  }
-
-  let hour = case int.compare(time.hour, 10) {
-    order.Lt -> "0" <> int.to_string(time.hour)
-    _ -> int.to_string(time.hour)
-  }
-
-  let minute = case int.compare(time.minute, 10) {
-    order.Lt -> "0" <> int.to_string(time.minute)
-    _ -> int.to_string(time.minute)
-  }
-
-  let seconds = case int.compare(time.second, 10) {
-    order.Lt -> "0" <> int.to_string(time.second)
-    _ -> int.to_string(time.second)
-  }
-
-  let milliseconds = case int.compare(time.milli_second, 1000) {
-    order.Lt -> int.to_string(time.milli_second)
-    _ -> "000"
-  }
-
-  let final_string =
-    "["
-    <> month
-    <> "-"
-    <> day
-    <> " "
-    <> hour
-    <> "-"
-    <> minute
-    <> "-"
-    <> seconds
-    <> "-"
-    <> milliseconds
-    <> "]"
-
-  let date_bytes =
-    final_string
-    |> bit_array.from_string
-
-  let prefinal_bytes =
-    <<80:little-size(32)>>
-    |> bit_array.append(<<940:size(16)>>)
-    |> bit_array.append(date_bytes)
-
-  let final_bytes =
-    <<bit_array.byte_size(prefinal_bytes):size(16)>>
-    |> bit_array.append(prefinal_bytes)
-
-  final_bytes
-}
+import packets/auth
+import packets/first_date
 
 pub fn main() {
-  io.debug(bytes_builder.from_bit_array(first_date_packet()))
+  let first_date_pack =
+    first_date.first_date()
+    |> pack.pack()
+
+  io.debug(bytes_builder.from_bit_array(first_date_pack))
 
   let assert Ok(_) =
     glisten.handler(
@@ -92,11 +25,46 @@ pub fn main() {
           "new connection with client ip:" <> string.inspect(conn.client_ip),
         )
         let assert Ok(_) =
-          glisten.send(conn, bytes_builder.from_bit_array(first_date_packet()))
+          glisten.send(conn, bytes_builder.from_bit_array(first_date_pack))
         #(Nil, None)
       },
       fn(msg, state, conn) {
         let assert Packet(msg) = msg
+
+        case msg {
+          <<
+            len:little-size(16),
+            id:little-size(32),
+            opcode:little-size(16),
+            next:bytes,
+          >> -> {
+            io.debug(
+              "unpacked header with len: "
+              <> int.to_string(len)
+              <> " and id:"
+              <> int.to_string(id),
+            )
+
+            case opcode {
+              431 ->
+                auth.auth(
+                  Unpack(next, fn(auth) {
+                    io.debug("got a new auth")
+                    io.debug(auth)
+                    Nil
+                  }),
+                )
+              _ -> {
+                io.debug("unknown opcode")
+                Nil
+              }
+            }
+          }
+          _ -> {
+            io.debug("something wrong with unpack header")
+            Nil
+          }
+        }
         let assert Ok(_) = glisten.send(conn, bytes_builder.from_bit_array(msg))
         actor.continue(state)
       },
