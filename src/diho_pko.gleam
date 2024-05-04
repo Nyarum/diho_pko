@@ -54,6 +54,7 @@ pub fn main() {
                 |> auth.auth
                 |> Ok
               432 -> {
+                io.debug("account exited")
                 Error(Normal)
               }
               _ -> {
