@@ -5,7 +5,6 @@ import gleam/bit_array
 import gleam/bytes_builder
 import gleam/erlang/process.{Normal}
 import gleam/int
-import gleam/int
 import gleam/io
 import gleam/option.{None}
 import gleam/order
@@ -18,7 +17,7 @@ import packets/create_character
 import packets/first_date
 
 type Buffer {
-  Buffer(buf: BitArray, len: Int)
+  Buffer(buf: BitArray)
 }
 
 pub fn main() {
@@ -34,15 +33,6 @@ pub fn main() {
       ),
     )
 
-  let buffer_collect = Buffer(<<>>, 0)
-  let collect_bytes = fn(buffer, len, buf) -> BitArray {
-    case int.compare(bit_array.byte_size(buf), len) {
-      order.Lt -> {
-        Buffer(..buffer_collect, buf: buf, len: len)
-      }
-    }
-  }
-
   let assert Ok(_) =
     glisten.handler(
       fn(conn) {
@@ -55,7 +45,7 @@ pub fn main() {
         let assert Ok(_) =
           bytes_builder.from_bit_array(first_date_pack)
           |> glisten.send(conn, _)
-        #(Nil, None)
+        #(Buffer(<<>>), None)
       },
       fn(msg, state, conn) {
         let assert Packet(msg) = msg
@@ -115,7 +105,7 @@ pub fn main() {
         }
 
         case switch {
-          Ok(Ok(Nil)) -> actor.continue(Nil)
+          Ok(Ok(Nil)) -> actor.continue(Buffer(<<>>))
           Ok(Error(state)) -> {
             io.debug("error send")
             io.debug(state)
