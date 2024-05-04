@@ -3,5 +3,5 @@ pub type Pack {
 }
 
 pub type Unpack(object) {
-  Unpack(data: BitArray, handler: fn(object) -> Nil)
+  Unpack(data: BitArray, handler: fn(object) -> BitArray)
 }

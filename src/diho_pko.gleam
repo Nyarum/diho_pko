@@ -1,7 +1,7 @@
 import bytes/pack
 import bytes/packet.{Unpack}
 import gleam/bytes_builder
-import gleam/erlang/process
+import gleam/erlang/process.{Normal}
 import gleam/int
 import gleam/io
 import gleam/option.{None}
@@ -9,7 +9,6 @@ import gleam/otp/actor
 import gleam/string
 import glisten.{Packet}
 import packets/auth
-import packets/character_screen
 import packets/first_date
 
 pub fn main() {
@@ -29,13 +28,14 @@ pub fn main() {
           glisten.send(conn, bytes_builder.from_bit_array(first_date_pack))
         #(Nil, None)
       },
-      fn(msg, state, conn) {
+      fn(msg, _, conn) {
         let assert Packet(msg) = msg
 
-        case msg {
+        let switch = case msg {
           <<_:16>> -> {
-            io.debug("ping packet")
-            Nil
+            let assert Ok(_) =
+              glisten.send(conn, bytes_builder.from_bit_array(msg))
+            Ok(Ok(Nil))
           }
           <<len:16, id:little-size(32), opcode:big-16, next:bytes>> -> {
             io.debug(
@@ -47,35 +47,43 @@ pub fn main() {
               <> int.to_string(opcode),
             )
 
-            case opcode {
+            let res = case opcode {
               431 ->
-                auth.auth(
-                  Unpack(next, fn(auth) {
-                    io.debug("got a new auth")
-                    io.debug(auth)
-
-                    let cs_pack =
-                      character_screen.character_screen()
-                      |> pack.pack()
-
-                    let assert Ok(_) =
-                      glisten.send(conn, bytes_builder.from_bit_array(cs_pack))
-                    Nil
-                  }),
-                )
-              _ -> {
-                io.debug("unknown opcode")
-                Nil
+                auth.handle
+                |> Unpack(next, _)
+                |> auth.auth
+                |> Ok
+              432 -> {
+                Error(Normal)
               }
+              _ -> {
+                Error(Normal)
+              }
+            }
+
+            case res {
+              Ok(buf) ->
+                bytes_builder.from_bit_array(buf)
+                |> glisten.send(conn, _)
+                |> Ok
+              Error(state) -> Error(state)
             }
           }
           _ -> {
             io.debug("something wrong with unpack header")
-            Nil
+            Ok(Ok(Nil))
           }
         }
-        let assert Ok(_) = glisten.send(conn, bytes_builder.from_bit_array(msg))
-        actor.continue(state)
+
+        case switch {
+          Ok(Ok(Nil)) -> actor.continue(Nil)
+          Ok(Error(state)) -> {
+            io.debug("error send")
+            io.debug(state)
+            actor.Stop(Normal)
+          }
+          Error(_) -> actor.Stop(Normal)
+        }
       },
     )
     |> glisten.serve(1973)
