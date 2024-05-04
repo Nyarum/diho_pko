@@ -1,5 +1,5 @@
 import bytes/pack.{pack}
-import bytes/packet.{type Unpack, Unpack}
+import bytes/packet.{type Pack, type Unpack, Pack, Unpack}
 import core/context.{type Context, Context}
 import databaase/account
 import gleam/bit_array
@@ -74,19 +74,25 @@ fn item_grid(unpack: Unpack(ItemGrid)) {
       is_change:8,
     >> -> {
       let inst_attrs =
-        list.range(0, 5)
-        |> list.map(fn(_) {
+        list.range(0, 4)
+        |> list.map(fn(i) {
+          let inst_attrs_cut =
+            unwrap(bit_array.slice(inst_attrs_list, i * 4, 4), <<>>)
+
           unwrap(
-            inst_attr(Unpack(inst_attrs_list, fn(_) { <<>> })),
+            inst_attr(Unpack(inst_attrs_cut, fn(_) { <<>> })),
             InstAttr(0, 0),
           )
         })
 
       let item_attrs =
-        list.range(0, 40)
-        |> list.map(fn(_) {
+        list.range(0, 39)
+        |> list.map(fn(i) {
+          let item_attrs_cut =
+            unwrap(bit_array.slice(item_attrs_list, i * 3, 3), <<>>)
+
           unwrap(
-            item_attr(Unpack(item_attrs_list, fn(_) { <<>> })),
+            item_attr(Unpack(item_attrs_cut, fn(_) { <<>> })),
             ItemAttr(0, True),
           )
         })
@@ -121,25 +127,19 @@ fn look(unpack: Unpack(Look)) {
   let assert Unpack(data, _) = unpack
 
   case data {
-    <<ver:16, type_id:16, next:bytes>> -> {
-      io.debug("check")
-      io.debug(next)
-      io.debug("double check")
-      io.debug(bit_array.byte_size(next))
-      io.debug(next)
-
+    <<ver:16, type_id:16, next:bytes-size(1620), hair:16>> -> {
       let item_grids =
         list.range(0, 9)
-        |> list.map(fn(_) {
-          //let item_grids_cut = bit_array.slice(item_grids, 0)
+        |> list.map(fn(i) {
+          let item_grids_cut = unwrap(bit_array.slice(next, i * 162, 162), <<>>)
 
           unwrap(
-            item_grid(Unpack(next, fn(_) { <<>> })),
+            item_grid(Unpack(item_grids_cut, fn(_) { <<>> })),
             ItemGrid(0, 0, [0, 0], [0, 0], 0, [0, 0], [], [], False),
           )
         })
 
-      Look(ver, type_id, item_grids, 222)
+      Look(ver, type_id, item_grids, hair)
       |> Ok
     }
     _ -> {
@@ -163,18 +163,10 @@ pub fn create_character(unpack: Unpack(CreateCharacter)) {
       next:bytes-size(look_len),
     >> ->
       {
-        io.debug("test_let")
-        io.debug(next)
-        io.debug(map_len)
-        io.debug(name_len)
-
         let look = case look(Unpack(next, fn(_) { <<>> })) {
           Ok(look) -> look
           _ -> Look(0, 0, [], 0)
         }
-
-        io.debug("look size")
-        io.debug(look_len)
 
         let name_string = unwrap(bit_array.to_string(name), "")
         let map_string = unwrap(bit_array.to_string(map), "")
@@ -190,9 +182,17 @@ pub fn create_character(unpack: Unpack(CreateCharacter)) {
   }
 }
 
+pub fn create_character_reply() -> Pack {
+  let prefinal_bytes = <<935:16, 0:16>>
+
+  Pack(prefinal_bytes)
+}
+
 pub fn handle(ctx: Context, cc: CreateCharacter) -> BitArray {
   let assert Context(db) = ctx
 
   io.debug("handle create character")
-  <<>>
+
+  create_character_reply()
+  |> pack
 }
