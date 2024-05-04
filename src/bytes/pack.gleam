@@ -5,9 +5,11 @@ pub fn pack(pack: Pack) -> BitArray {
   let assert Pack(bytes) = pack
 
   let prefinal_bytes =
-    <<80:little-size(32)>>
+    <<128:little-size(32)>>
     |> bit_array.append(bytes)
 
-  <<bit_array.byte_size(bytes):size(16)>>
+  let len = bit_array.byte_size(prefinal_bytes) + 2
+
+  <<len:size(16)>>
   |> bit_array.append(prefinal_bytes)
 }

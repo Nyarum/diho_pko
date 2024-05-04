@@ -9,6 +9,7 @@ import gleam/otp/actor
 import gleam/string
 import glisten.{Packet}
 import packets/auth
+import packets/character_screen
 import packets/first_date
 
 pub fn main() {
@@ -32,17 +33,18 @@ pub fn main() {
         let assert Packet(msg) = msg
 
         case msg {
-          <<
-            len:little-size(16),
-            id:little-size(32),
-            opcode:little-size(16),
-            next:bytes,
-          >> -> {
+          <<_:16>> -> {
+            io.debug("ping packet")
+            Nil
+          }
+          <<len:16, id:little-size(32), opcode:big-16, next:bytes>> -> {
             io.debug(
               "unpacked header with len: "
               <> int.to_string(len)
               <> " and id:"
-              <> int.to_string(id),
+              <> int.to_string(id)
+              <> " and opcode:"
+              <> int.to_string(opcode),
             )
 
             case opcode {
@@ -51,6 +53,13 @@ pub fn main() {
                   Unpack(next, fn(auth) {
                     io.debug("got a new auth")
                     io.debug(auth)
+
+                    let cs_pack =
+                      character_screen.character_screen()
+                      |> pack.pack()
+
+                    let assert Ok(_) =
+                      glisten.send(conn, bytes_builder.from_bit_array(cs_pack))
                     Nil
                   }),
                 )

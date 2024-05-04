@@ -1,5 +1,6 @@
 import bytes/packet.{type Unpack, Unpack}
 import gleam/bit_array
+import gleam/io
 import gleam/result.{unwrap}
 
 pub type Auth {
@@ -18,25 +19,30 @@ pub fn auth(unpack: Unpack(Auth)) {
 
   case data {
     <<
-      key_len:little-size(16),
+      key_len:16,
       key:bytes-size(key_len),
-      login_len:little-size(16),
+      login_len:16,
       login:bytes-size(login_len),
-      password_len:little-size(16),
+      password_len:16,
       password:bytes-size(password_len),
-      mac_len:little-size(16),
+      mac_len:16,
       mac:bytes-size(mac_len),
-      is_cheat:little-size(32),
-      client_version:little-size(32),
+      is_cheat:16,
+      client_version:16,
     >> ->
-      handler(Auth(
+      Auth(
         key,
         unwrap(bit_array.to_string(login), ""),
         password,
         unwrap(bit_array.to_string(mac), ""),
         is_cheat,
         client_version,
-      ))
-    _ -> Nil
+      )
+      |> handler
+    _ -> {
+      io.debug("pattern match is wrong")
+      io.debug(data)
+      Nil
+    }
   }
 }
