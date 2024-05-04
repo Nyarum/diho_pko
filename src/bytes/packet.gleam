@@ -1,3 +1,5 @@
+import core/context.{type Context}
+
 pub type Pack {
   Pack(BitArray)
 }

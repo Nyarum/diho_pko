@@ -1,22 +1,30 @@
 import bytes/pack
 import bytes/packet.{Unpack}
+import core/context.{Context}
 import gleam/bytes_builder
 import gleam/erlang/process.{Normal}
 import gleam/int
 import gleam/io
 import gleam/option.{None}
 import gleam/otp/actor
+import gleam/pgo
 import gleam/string
 import glisten.{Packet}
 import packets/auth
 import packets/first_date
 
 pub fn main() {
-  let first_date_pack =
-    first_date.first_date()
-    |> pack.pack()
-
-  io.debug(bytes_builder.from_bit_array(first_date_pack))
+  let db =
+    pgo.connect(
+      pgo.Config(
+        ..pgo.default_config(),
+        host: "127.0.0.1",
+        database: "postgres",
+        user: "postgres",
+        password: option.Some("example"),
+        pool_size: 15,
+      ),
+    )
 
   let assert Ok(_) =
     glisten.handler(
@@ -24,8 +32,12 @@ pub fn main() {
         io.debug(
           "new connection with client ip:" <> string.inspect(conn.client_ip),
         )
+        let first_date_pack =
+          first_date.first_date()
+          |> pack.pack()
         let assert Ok(_) =
-          glisten.send(conn, bytes_builder.from_bit_array(first_date_pack))
+          bytes_builder.from_bit_array(first_date_pack)
+          |> glisten.send(conn, _)
         #(Nil, None)
       },
       fn(msg, _, conn) {
@@ -33,9 +45,8 @@ pub fn main() {
 
         let switch = case msg {
           <<_:16>> -> {
-            let assert Ok(_) =
-              glisten.send(conn, bytes_builder.from_bit_array(msg))
-            Ok(Ok(Nil))
+            glisten.send(conn, bytes_builder.from_bit_array(msg))
+            |> Ok
           }
           <<len:16, id:little-size(32), opcode:big-16, next:bytes>> -> {
             io.debug(
@@ -49,7 +60,7 @@ pub fn main() {
 
             let res = case opcode {
               431 ->
-                auth.handle
+                auth.handle(Context(db), _)
                 |> Unpack(next, _)
                 |> auth.auth
                 |> Ok

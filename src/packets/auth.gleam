@@ -1,20 +1,12 @@
 import bytes/pack.{pack}
 import bytes/packet.{type Unpack, Unpack}
+import core/context.{type Context, Context}
+import databaase/account
 import gleam/bit_array
 import gleam/io
 import gleam/result.{unwrap}
 import packets/character_screen
-
-pub type Auth {
-  Auth(
-    key: BitArray,
-    login: String,
-    password: BitArray,
-    mac: String,
-    is_cheat: Int,
-    client_version: Int,
-  )
-}
+import packets/dto.{type Auth, Auth}
 
 pub fn auth(unpack: Unpack(Auth)) {
   let assert Unpack(data, handler) = unpack
@@ -49,7 +41,11 @@ pub fn auth(unpack: Unpack(Auth)) {
   }
 }
 
-pub fn handle(auth: Auth) -> BitArray {
+pub fn handle(ctx: Context, auth: Auth) -> BitArray {
+  let assert Context(db) = ctx
+
+  let assert Ok(_) = io.debug(account.create_account(db, auth))
+
   io.debug("got a new auth")
   io.debug(auth)
 
