@@ -2,6 +2,7 @@ import bytes/pack.{pack}
 import bytes/packet.{type Pack, type Unpack, Pack, Unpack}
 import core/context.{type Context, Context}
 import databaase/account
+import databaase/character
 import gleam/bit_array
 import gleam/bool
 import gleam/int
@@ -168,8 +169,11 @@ pub fn create_character(unpack: Unpack(CreateCharacter)) {
           _ -> Look(0, 0, [], 0)
         }
 
-        let name_string = unwrap(bit_array.to_string(name), "")
-        let map_string = unwrap(bit_array.to_string(map), "")
+        let assert Ok(name_cut) = bit_array.slice(name, 0, name_len - 1)
+        let assert Ok(map_cut) = bit_array.slice(map, 0, map_len - 1)
+
+        let name_string = unwrap(bit_array.to_string(name_cut), "")
+        let map_string = unwrap(bit_array.to_string(map_cut), "")
 
         CreateCharacter(name_string, map_string, look_len, look)
       }
@@ -192,6 +196,8 @@ pub fn handle(ctx: Context, cc: CreateCharacter) -> BitArray {
   let assert Context(db) = ctx
 
   io.debug("handle create character")
+
+  let assert Ok(_) = io.debug(character.create_character(db, 1, cc))
 
   create_character_reply()
   |> pack
