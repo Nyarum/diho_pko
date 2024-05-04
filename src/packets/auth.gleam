@@ -24,14 +24,19 @@ pub fn auth(unpack: Unpack(Auth)) {
       is_cheat:16,
       client_version:16,
     >> ->
-      Auth(
-        key,
-        unwrap(bit_array.to_string(login), ""),
-        password,
-        unwrap(bit_array.to_string(mac), ""),
-        is_cheat,
-        client_version,
-      )
+      {
+        let assert Ok(login_cut) = bit_array.slice(login, 0, login_len - 1)
+        let assert Ok(mac_cut) = bit_array.slice(mac, 0, mac_len - 1)
+
+        Auth(
+          key,
+          unwrap(bit_array.to_string(login_cut), ""),
+          password,
+          unwrap(bit_array.to_string(mac_cut), ""),
+          is_cheat,
+          client_version,
+        )
+      }
       |> handler
     _ -> {
       io.debug("pattern match is wrong")
