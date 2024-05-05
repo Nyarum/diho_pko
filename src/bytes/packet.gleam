@@ -4,6 +4,6 @@ pub type Pack {
   Pack(BitArray)
 }
 
-pub type Unpack(object) {
-  Unpack(data: BitArray, handler: fn(object) -> BitArray)
+pub type Unpack(object, return) {
+  Unpack(data: BitArray, handler: fn(object) -> return)
 }

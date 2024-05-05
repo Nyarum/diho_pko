@@ -3,12 +3,16 @@ import bytes/packet.{type Unpack, Unpack}
 import core/context.{type Context, Context}
 import databaase/account
 import gleam/bit_array
+import gleam/dict.{type Dict}
+import gleam/dynamic
 import gleam/io
+import gleam/list
+import gleam/pgo.{Returned}
 import gleam/result.{unwrap}
 import packets/character_screen
 import packets/dto.{type Auth, Auth}
 
-pub fn auth(unpack: Unpack(Auth)) {
+pub fn auth(unpack: Unpack(Auth, AuthResp)) {
   let assert Unpack(data, handler) = unpack
 
   case data {
@@ -41,19 +45,51 @@ pub fn auth(unpack: Unpack(Auth)) {
     _ -> {
       io.debug("pattern match is wrong")
       io.debug(data)
-      <<>>
+      AuthResp(<<>>, 0)
     }
   }
 }
 
-pub fn handle(ctx: Context, auth: Auth) -> BitArray {
-  let assert Context(db) = ctx
+pub type AuthResp {
+  AuthResp(buf: BitArray, account_id: Int)
+}
 
-  let assert Ok(_) = io.debug(account.create_account(db, auth))
+type Errors {
+  CantGetAccountID
+}
+
+pub fn handle(ctx: Context, auth: Auth) -> AuthResp {
+  let assert Context(db, _, _, _) = ctx
+
+  let assert Ok(account_id) = case account.create_account(db, auth) {
+    Ok(account) -> {
+      io.debug("account")
+      io.debug(account)
+
+      case account {
+        Returned(_, accounts) ->
+          case list.first(accounts) {
+            Ok(one_account) -> {
+              io.debug(one_account)
+              Ok(one_account)
+            }
+            Error(err) -> {
+              io.debug(err)
+              Error(CantGetAccountID)
+            }
+          }
+      }
+    }
+    Error(err) -> {
+      io.debug(err)
+      Error(CantGetAccountID)
+    }
+  }
 
   io.debug("got a new auth")
   io.debug(auth)
 
   character_screen.character_screen()
   |> pack.pack()
+  |> AuthResp(account_id)
 }

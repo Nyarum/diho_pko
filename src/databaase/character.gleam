@@ -12,9 +12,8 @@ pub fn create_character(
   account_id: Int,
   create_character: CreateCharacter,
 ) {
-  // An SQL statement to run. It takes one int as a parameter
   let sql =
-    "INSERT INTO characters (account_id, name, map, look, hair) VALUES ($1, $2, $3, $4, $5)"
+    "INSERT INTO characters (account_id, name, map, look, hair) VALUES ($1, $2, $3, $4, $5) RETURNING id"
 
   let args: List(Value) = [
     pgo.int(account_id),
@@ -24,9 +23,9 @@ pub fn create_character(
     pgo.int(create_character.look.hair),
   ]
 
-  // Run the query against the PostgreSQL database
-  // The int `1` is given as a parameter
-  let assert Ok(_) = pgo.execute(sql, db, args, dynamic.dynamic)
+  let return_type = dynamic.element(0, dynamic.int)
+
+  let assert Ok(_) = pgo.execute(sql, db, args, return_type)
 }
 
 pub fn get_characters(db: pgo.Connection, account_id: Int) {

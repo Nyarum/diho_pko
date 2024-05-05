@@ -19,7 +19,7 @@ type Errors {
   PatternMatchWrong
 }
 
-fn item_attr(unpack: Unpack(ItemAttr)) {
+fn item_attr(unpack: Unpack(ItemAttr, BitArray)) {
   let assert Unpack(data, _) = unpack
 
   case data {
@@ -40,7 +40,7 @@ fn item_attr(unpack: Unpack(ItemAttr)) {
   }
 }
 
-fn inst_attr(unpack: Unpack(InstAttr)) {
+fn inst_attr(unpack: Unpack(InstAttr, BitArray)) {
   let assert Unpack(data, _) = unpack
 
   case data {
@@ -56,7 +56,7 @@ fn inst_attr(unpack: Unpack(InstAttr)) {
   }
 }
 
-fn item_grid(unpack: Unpack(ItemGrid)) {
+fn item_grid(unpack: Unpack(ItemGrid, BitArray)) {
   let assert Unpack(data, _) = unpack
 
   case data {
@@ -124,7 +124,7 @@ fn item_grid(unpack: Unpack(ItemGrid)) {
   }
 }
 
-fn look(unpack: Unpack(Look)) {
+fn look(unpack: Unpack(Look, BitArray)) {
   let assert Unpack(data, _) = unpack
 
   case data {
@@ -151,7 +151,7 @@ fn look(unpack: Unpack(Look)) {
   }
 }
 
-pub fn create_character(unpack: Unpack(CreateCharacter)) {
+pub fn create_character(unpack: Unpack(CreateCharacter, BitArray)) {
   let assert Unpack(data, handler) = unpack
 
   case data {
@@ -193,9 +193,10 @@ pub fn create_character_reply() -> Pack {
 }
 
 pub fn handle(ctx: Context, cc: CreateCharacter) -> BitArray {
-  let assert Context(db) = ctx
+  let assert Context(db, _, _, account_id) = ctx
 
   io.debug("handle create character")
+  io.debug(account_id)
 
   let assert Ok(_) = io.debug(character.create_character(db, 1, cc))
 
