@@ -23,7 +23,7 @@ fn item_attr(unpack: Unpack(ItemAttr)) {
   let assert Unpack(data, _) = unpack
 
   case data {
-    <<id:16, is_valid:8>> -> {
+    <<id:little-16, is_valid:8>> -> {
       let is_valid_bool = case is_valid {
         0 -> False
         _ -> True
@@ -44,7 +44,7 @@ fn inst_attr(unpack: Unpack(InstAttr)) {
   let assert Unpack(data, _) = unpack
 
   case data {
-    <<id:16, value:16>> -> {
+    <<id:little-16, value:little-16>> -> {
       InstAttr(id, value)
       |> Ok
     }
@@ -61,15 +61,15 @@ fn item_grid(unpack: Unpack(ItemGrid)) {
 
   case data {
     <<
-      id:16,
-      num:16,
-      endure_list_0:16,
-      endure_list_1:16,
-      energy_list_0:16,
-      energy_list_1:16,
-      forge_lv:8,
-      db_params_0:32,
-      db_params_1:32,
+      id:little-16,
+      num:little-16,
+      endure_list_0:little-16,
+      endure_list_1:little-16,
+      energy_list_0:little-16,
+      energy_list_1:little-16,
+      forge_lv:little-8,
+      db_params_0:little-32,
+      db_params_1:little-32,
       inst_attrs_list:bits-size(160),
       item_attrs_list:bits-size(960),
       is_change:8,
@@ -128,7 +128,7 @@ fn look(unpack: Unpack(Look)) {
   let assert Unpack(data, _) = unpack
 
   case data {
-    <<ver:16, type_id:16, next:bytes-size(1620), hair:16>> -> {
+    <<ver:little-16, type_id:little-16, next:bytes-size(1620), hair:little-16>> -> {
       let item_grids =
         list.range(0, 9)
         |> list.map(fn(i) {
@@ -172,8 +172,8 @@ pub fn create_character(unpack: Unpack(CreateCharacter)) {
         let assert Ok(name_cut) = bit_array.slice(name, 0, name_len - 1)
         let assert Ok(map_cut) = bit_array.slice(map, 0, map_len - 1)
 
-        let name_string = unwrap(bit_array.to_string(name_cut), "")
-        let map_string = unwrap(bit_array.to_string(map_cut), "")
+        let name_string = unwrap(bit_array.to_string(name_cut), "unknown")
+        let map_string = unwrap(bit_array.to_string(map_cut), "unknown")
 
         CreateCharacter(name_string, map_string, look_len, look)
       }

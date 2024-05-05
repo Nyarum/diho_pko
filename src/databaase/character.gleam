@@ -3,9 +3,8 @@ import gleam/crypto
 import gleam/dict
 import gleam/dynamic
 import gleam/io
-import gleam/json.{type Json}
+import gleam/json.{type Json, to_string}
 import gleam/pgo.{type Value}
-import jasper.{Object, String}
 import packets/dto.{type CreateCharacter, type Look}
 
 pub fn create_character(
@@ -17,21 +16,32 @@ pub fn create_character(
   let sql =
     "INSERT INTO characters (account_id, name, map, look, hair) VALUES ($1, $2, $3, $4, $5)"
 
-  let look_dict =
-    dict.new()
-    |> dict.insert("test", String("tett"))
-
-  io.debug(jasper.stringify_json(Object(look_dict)))
-
   let args: List(Value) = [
     pgo.int(account_id),
     pgo.text(create_character.name),
     pgo.text(create_character.map),
-    pgo.text(""),
+    pgo.text(to_string(dto.look_to_json(create_character.look))),
     pgo.int(create_character.look.hair),
   ]
 
   // Run the query against the PostgreSQL database
   // The int `1` is given as a parameter
   let assert Ok(_) = pgo.execute(sql, db, args, dynamic.dynamic)
+}
+
+pub fn get_characters(db: pgo.Connection, account_id: Int) {
+  let sql =
+    "SELECT id, account_id, name, map, look, hair FROM characters WHERE account_id = $1"
+
+  let return_type =
+    dynamic.tuple6(
+      dynamic.int,
+      dynamic.int,
+      dynamic.string,
+      dynamic.string,
+      dynamic.string,
+      dynamic.int,
+    )
+
+  let assert Ok(_) = pgo.execute(sql, db, [pgo.int(account_id)], return_type)
 }
