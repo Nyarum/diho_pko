@@ -4,6 +4,25 @@ import gleam/dynamic
 import gleam/pgo.{type Value}
 import packets/dto.{type Auth}
 
+pub fn get_account(db: pgo.Connection, login: String) {
+  let sql =
+    "SELECT id, login, password, mac, is_cheat, client_version FROM accounts WHERE login = $1"
+
+  let args: List(Value) = [pgo.text(login)]
+
+  let return_type =
+    dynamic.tuple6(
+      dynamic.int,
+      dynamic.string,
+      dynamic.string,
+      dynamic.string,
+      dynamic.int,
+      dynamic.int,
+    )
+
+  let assert Ok(_) = pgo.execute(sql, db, args, return_type)
+}
+
 pub fn create_account(db: pgo.Connection, auth: Auth) {
   let sql =
     "INSERT INTO accounts (login, password, mac, is_cheat, client_version) VALUES ($1, $2, $3, $4, $5) RETURNING id"

@@ -12,7 +12,7 @@ import gleam/otp/actor
 import gleam/pgo
 import gleam/string
 import glisten.{Packet}
-import packets/auth.{AuthResp}
+import packets/auth.{AuthResp, Continue}
 import packets/create_character
 import packets/first_date
 
@@ -80,9 +80,15 @@ pub fn main() {
             case process_packet(new_state, conn) {
               Ok(ctx) -> actor.continue(Context(..ctx, buf: <<>>, last_len: 0))
               Error(err) -> {
-                io.debug("happened some shit")
-                io.debug(err)
-                actor.Stop(Normal)
+                case err {
+                  SucessContinue ->
+                    actor.continue(Context(..state, buf: <<>>, last_len: 0))
+                  _ -> {
+                    io.debug("happened some shit")
+                    io.debug(err)
+                    actor.Stop(Normal)
+                  }
+                }
               }
             }
           }
@@ -123,8 +129,6 @@ fn process_packet(ctx: Context, conn) -> Result(Context, Errors) {
         <> int.to_string(opcode),
       )
 
-      io.debug(next)
-
       let auth_res = case opcode {
         431 ->
           auth.handle(ctx, _)
@@ -133,7 +137,7 @@ fn process_packet(ctx: Context, conn) -> Result(Context, Errors) {
           |> Ok
         _ -> {
           io.debug("something wrong")
-          Error(Nothing)
+          Ok(Continue)
         }
       }
 
@@ -151,7 +155,8 @@ fn process_packet(ctx: Context, conn) -> Result(Context, Errors) {
         }
         _ -> {
           case auth_res {
-            Ok(buf) -> Ok(buf.buf)
+            Ok(AuthResp(buf, account_id)) -> Ok(buf)
+            Ok(Continue) -> Error(SucessContinue)
             Error(err) -> Error(err)
           }
         }
@@ -162,7 +167,9 @@ fn process_packet(ctx: Context, conn) -> Result(Context, Errors) {
           case glisten.send(conn, bytes_builder.from_bit_array(buf)) {
             Ok(_) ->
               case auth_res {
-                Ok(buf) -> Ok(Context(..ctx, account_id: buf.account_id))
+                Ok(AuthResp(buf, account_id)) ->
+                  Ok(Context(..ctx, account_id: account_id))
+                Ok(Continue) -> Error(SucessContinue)
                 Error(err) -> Error(err)
               }
             Error(err) -> {

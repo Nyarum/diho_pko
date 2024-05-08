@@ -1,8 +1,8 @@
 import bytes/pack.{pack}
 import bytes/packet.{type Pack, type Unpack, Pack, Unpack}
 import core/context.{type Context, Context}
-import databaase/account
-import databaase/character
+import database/account
+import database/character
 import gleam/bit_array
 import gleam/bool
 import gleam/int
@@ -198,7 +198,7 @@ pub fn handle(ctx: Context, cc: CreateCharacter) -> BitArray {
   io.debug("handle create character")
   io.debug(account_id)
 
-  let assert Ok(_) = io.debug(character.create_character(db, 1, cc))
+  let assert Ok(_) = io.debug(character.create_character(db, account_id, cc))
 
   create_character_reply()
   |> pack
