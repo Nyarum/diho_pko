@@ -8,12 +8,17 @@ import gleam/dict.{type Dict}
 import gleam/dynamic
 import gleam/io
 import gleam/list
-import gleam/pgo.{Returned}
-import gleam/result.{unwrap}
+import gleam/pgo.{type Returned, Returned}
+import gleam/result.{try, unwrap}
 import packets/character_screen.{type Character, Character}
 import packets/dto.{type Auth, Auth}
 
-pub fn auth(unpack: Unpack(Auth, AuthResp)) {
+pub type Error {
+  PatternMatchWrong
+  CantGetAccountID
+}
+
+pub fn auth(unpack: Unpack(Auth, AuthResp)) -> Result(AuthResp, Error) {
   let assert Unpack(data, handler) = unpack
 
   case data {
@@ -28,36 +33,40 @@ pub fn auth(unpack: Unpack(Auth, AuthResp)) {
       mac:bytes-size(mac_len),
       is_cheat:16,
       client_version:16,
-    >> ->
-      {
-        let assert Ok(login_cut) = bit_array.slice(login, 0, login_len - 1)
-        let assert Ok(mac_cut) = bit_array.slice(mac, 0, mac_len - 1)
-
-        Auth(
-          key,
-          unwrap(bit_array.to_string(login_cut), ""),
-          password,
-          unwrap(bit_array.to_string(mac_cut), ""),
-          is_cheat,
-          client_version,
-        )
+    >> -> {
+      let assert Ok(login_cut) = {
+        use login_cut <- try(bit_array.slice(login, 0, login_len - 1))
+        use login_cut <- try(bit_array.to_string(login_cut))
+        Ok(login_cut)
       }
+
+      let assert Ok(mac_cut) = {
+        use mac_cut <- try(bit_array.slice(mac, 0, mac_len - 1))
+        use mac_cut <- try(bit_array.to_string(mac_cut))
+        Ok(mac_cut)
+      }
+
+      Auth(key, login_cut, password, mac_cut, is_cheat, client_version)
       |> handler
+      |> Ok
+    }
     _ -> {
-      io.debug("pattern match is wrong")
       io.debug(data)
-      AuthResp(<<>>, 0)
+      Error(PatternMatchWrong)
     }
   }
 }
 
 pub type AuthResp {
   AuthResp(buf: BitArray, account_id: Int)
-  Continue
 }
 
-type Errors {
-  CantGetAccountID
+pub fn get_account_id(
+  returned: Returned(#(id, account_id, name, map, look, hair)),
+) {
+  let assert Ok(first) = list.first(returned.rows)
+  let #(id, _, _, _, _, _) = first
+  id
 }
 
 pub fn handle(ctx: Context, auth: Auth) -> AuthResp {
@@ -66,37 +75,17 @@ pub fn handle(ctx: Context, auth: Auth) -> AuthResp {
   let assert Ok(account_return) = account.get_account(db, auth.login)
   let assert Returned(count, account) = account_return
 
-  let assert Ok(account_id) = case count {
+  let account_id = case count {
     0 -> {
-      case account.create_account(db, auth) {
-        Ok(account) -> {
-          io.debug("account")
-          io.debug(account)
+      let assert Ok(create_account) = account.create_account(db, auth)
+      let assert Returned(_, create_account_rows) = create_account
+      let assert Ok(create_account_one) = list.first(create_account_rows)
 
-          case account {
-            Returned(_, accounts) ->
-              case list.first(accounts) {
-                Ok(one_account) -> {
-                  io.debug(one_account)
-                  Ok(one_account)
-                }
-                Error(err) -> {
-                  io.debug(err)
-                  Error(CantGetAccountID)
-                }
-              }
-          }
-        }
-        Error(err) -> {
-          io.debug(err)
-          Error(CantGetAccountID)
-        }
-      }
+      create_account_one
     }
     _ -> {
-      let #(id, _, _, _, _, _) =
-        result.unwrap(list.first(account), #(0, "", "", "", 0, 0))
-      Ok(id)
+      let assert Ok(#(id, _, _, _, _, _)) = list.first(account)
+      id
     }
   }
 
@@ -106,12 +95,12 @@ pub fn handle(ctx: Context, auth: Auth) -> AuthResp {
     Returned(_, characters) -> characters
   }
 
-  let characters_format =
-    list.map(characters, fn(character) {
-      let #(id, account_id, name, map, look, hair) = character
-      let assert Ok(look) = dto.json_to_look(look)
-      Character(True, name, "Job", map, 1, 0, look)
-    })
+  let characters_format = {
+    use character <- list.map(characters)
+    let #(id, account_id, name, map, look, hair) = character
+    let assert Ok(look) = dto.json_to_look(look)
+    Character(True, name, "Job", map, 1, 0, look)
+  }
 
   io.debug(characters_format)
 

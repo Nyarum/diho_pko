@@ -4,23 +4,32 @@ import core/context.{type Context, Context}
 import gleam/bit_array
 import gleam/bytes_builder
 import gleam/erlang/process.{Normal}
+import gleam/float
 import gleam/int
 import gleam/io
 import gleam/option.{None}
 import gleam/order
 import gleam/otp/actor
 import gleam/pgo
+import gleam/result
 import gleam/string
 import glisten.{Packet}
-import packets/auth.{AuthResp, Continue}
+import packets/auth.{type AuthResp as AuthRespPkt, AuthResp as AuthRespPkt}
 import packets/create_character
 import packets/first_date
 
 type Errors {
-  SucessContinue
+  NotFoundOpcode
   SendError
   Nothing
   Closed
+  CantHandle
+}
+
+fn ttt() {
+  use val <- result.try(float.divide(1.0, 0.01))
+  io.println(float.to_string(val))
+  Ok(val)
 }
 
 pub fn main() {
@@ -80,15 +89,9 @@ pub fn main() {
             case process_packet(new_state, conn) {
               Ok(ctx) -> actor.continue(Context(..ctx, buf: <<>>, last_len: 0))
               Error(err) -> {
-                case err {
-                  SucessContinue ->
-                    actor.continue(Context(..state, buf: <<>>, last_len: 0))
-                  _ -> {
-                    io.debug("happened some shit")
-                    io.debug(err)
-                    actor.Stop(Normal)
-                  }
-                }
+                io.debug("happened some shit")
+                io.debug(err)
+                actor.Stop(Normal)
               }
             }
           }
@@ -104,6 +107,11 @@ pub fn main() {
     |> glisten.serve(1973)
 
   process.sleep_forever()
+}
+
+type BufOrData {
+  Data(buf: BitArray, account_id: Int)
+  Buf(buf: BitArray)
 }
 
 fn process_packet(ctx: Context, conn) -> Result(Context, Errors) {
@@ -129,24 +137,27 @@ fn process_packet(ctx: Context, conn) -> Result(Context, Errors) {
         <> int.to_string(opcode),
       )
 
-      let auth_res = case opcode {
-        431 ->
-          auth.handle(ctx, _)
-          |> Unpack(next, _)
-          |> auth.auth
-          |> Ok
-        _ -> {
-          io.debug("something wrong")
-          Ok(Continue)
-        }
-      }
+      let res: Result(BufOrData, Errors) = case opcode {
+        431 -> {
+          let auth_handle =
+            auth.handle(ctx, _)
+            |> Unpack(next, _)
+            |> auth.auth
 
-      let res = case opcode {
+          case auth_handle {
+            Ok(AuthRespPkt(buf, account_id)) -> Ok(Data(buf, account_id))
+            Error(err) -> {
+              io.debug(err)
+              Error(CantHandle)
+            }
+          }
+        }
         435 -> {
           io.debug(bit_array.byte_size(next))
           create_character.handle(ctx, _)
           |> Unpack(next, _)
           |> create_character.create_character
+          |> Buf
           |> Ok
         }
         432 -> {
@@ -154,31 +165,23 @@ fn process_packet(ctx: Context, conn) -> Result(Context, Errors) {
           Error(Closed)
         }
         _ -> {
-          case auth_res {
-            Ok(AuthResp(buf, account_id)) -> Ok(buf)
-            Ok(Continue) -> Error(SucessContinue)
-            Error(err) -> Error(err)
-          }
+          io.debug("unknown opcode")
+          Error(NotFoundOpcode)
         }
       }
 
       case res {
-        Ok(buf) -> {
-          case glisten.send(conn, bytes_builder.from_bit_array(buf)) {
-            Ok(_) ->
-              case auth_res {
-                Ok(AuthResp(buf, account_id)) ->
-                  Ok(Context(..ctx, account_id: account_id))
-                Ok(Continue) -> Error(SucessContinue)
-                Error(err) -> Error(err)
-              }
-            Error(err) -> {
-              io.debug("can't send message")
-              io.debug(err)
+        Ok(Data(buf, account_id)) -> {
+          let assert Ok(_) =
+            glisten.send(conn, bytes_builder.from_bit_array(buf))
 
-              Error(SendError)
-            }
-          }
+          Ok(Context(..ctx, account_id: account_id))
+        }
+        Ok(Buf(buf)) -> {
+          let assert Ok(_) =
+            glisten.send(conn, bytes_builder.from_bit_array(buf))
+
+          Ok(ctx)
         }
         Error(state) -> Error(state)
       }
