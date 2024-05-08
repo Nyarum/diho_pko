@@ -102,14 +102,19 @@ pub fn character(character: Character) -> BitArray {
   io.debug("look len")
   io.debug(bit_array.byte_size(look_bytes))
 
+  let name =
+    bit_array.from_string(character.name)
+    |> bit_array.append(<<0x00>>)
+  let job =
+    bit_array.from_string(character.job)
+    |> bit_array.append(<<0x00>>)
+
   <<
-    bool.to_int(character.is_active):8,
-    string.byte_size(character.name):16,
-    character.name:utf8,
-    string.byte_size(character.job):16,
-    character.job:utf8,
-    string.byte_size(character.map):16,
-    character.map:utf8,
+    1:8,
+    bit_array.byte_size(name):16,
+    name:bits,
+    bit_array.byte_size(job):16,
+    job:bits,
     character.level:16,
     bit_array.byte_size(look_bytes):16,
     look_bytes:bits,
