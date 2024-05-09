@@ -564,10 +564,93 @@ pub fn world(world: World) -> Pack {
   |> Pack
 }
 
-pub fn pincode_confirm() -> Pack {
-  let prefinal_bytes =
-    <<942:size(16)>>
-    |> bit_array.append(<<0x00, 0x00>>)
+pub type EnterGame {
+  EnterGame(name: String)
+}
 
-  Pack(prefinal_bytes)
+pub fn enter_game(
+  unpack: Unpack(EnterGame, BitArray),
+) -> Result(BitArray, Error) {
+  let assert Unpack(data, handler) = unpack
+
+  case data {
+    <<name_len:16, name:bytes-size(name_len)>> -> {
+      let assert Ok(name_cut) = {
+        use name_cut <- try(bit_array.slice(name, 0, name_len - 1))
+        use name_cut <- try(bit_array.to_string(name_cut))
+        Ok(name_cut)
+      }
+
+      EnterGame(name_cut)
+      |> handler
+      |> Ok
+    }
+    _ -> {
+      io.debug(data)
+      Error(PatternMatchWrong)
+    }
+  }
+}
+
+pub fn enter_game_handle(ctx: Context, enter_game: EnterGame) -> BitArray {
+  let assert Context(db, _, _, account_id) = ctx
+
+  let item_grids =
+    list.repeat(LookItem(0, option.None, option.None, 0, [], 0, []), 10)
+
+  let look_appends = list.repeat(LookAppend(0, 0), 4)
+
+  let skills = list.repeat(Skill(0, 0, 0, 0, 0, 0, 0, 0, []), 9)
+
+  let attributes =
+    list.repeat(Attribute(0, 0), 74)
+    |> list.index_map(fn(attr, index) { Attribute(index, 1) })
+
+  let kitbag_items =
+    list.repeat(KitbagItem(65_535, 0, 0, [], [], 0, False, 0, 0, False, []), 24)
+
+  let shortcuts = list.repeat(Shortcut(0, 0), 36)
+
+  world(World(
+    0,
+    0,
+    0,
+    1,
+    0,
+    "garner",
+    0,
+    Base(
+      4,
+      10_271,
+      10_271,
+      "ingrysty (comm)",
+      0,
+      33_565_845,
+      1,
+      "ingrysty",
+      "motto_name",
+      4,
+      0,
+      "guild_name",
+      "guild_motto",
+      "stall_name",
+      1,
+      Position(217_475, 278_175, 40),
+      71,
+      0,
+      Side(0),
+      EntityEvent(10_271, 1, 0, "test event"),
+      Look(0, 4, 0, option.None, option.Some(LookHuman(2291, item_grids))),
+      0,
+      look_appends,
+    ),
+    SkillBag(36, 0, 9, skills),
+    SkillStates(0, []),
+    Attributes(0, 74, attributes),
+    Kitbag(0, 24, kitbag_items),
+    Shortcuts(shortcuts),
+    [],
+    10_271,
+  ))
+  |> pack.pack()
 }

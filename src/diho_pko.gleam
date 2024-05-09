@@ -17,6 +17,7 @@ import glisten.{Packet}
 import packets/auth.{type AuthResp as AuthRespPkt, AuthResp as AuthRespPkt}
 import packets/create_character
 import packets/first_date
+import packets/world
 
 type Errors {
   NotFoundOpcode
@@ -194,6 +195,20 @@ fn process_packet(ctx: Context, conn) -> Result(Context, Errors) {
             |> auth.remove_character
 
           case remove_character_handler {
+            Ok(buf) -> Ok(Buf(buf))
+            Error(err) -> {
+              io.debug(err)
+              Error(CantHandle)
+            }
+          }
+        }
+        433 -> {
+          let enter_game_handler =
+            world.enter_game_handle(ctx, _)
+            |> Unpack(next, _)
+            |> world.enter_game
+
+          case enter_game_handler {
             Ok(buf) -> Ok(Buf(buf))
             Error(err) -> {
               io.debug(err)
