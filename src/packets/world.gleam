@@ -110,10 +110,13 @@ const syn_look_switch = 0
 const syn_look_change = 1
 
 fn look_item(li: LookItem, syn_type: Int) -> BitArray {
+  let id_bytes = <<li.id:16>>
+
   case li.id {
-    0 -> <<>>
+    0 -> <<id_bytes:bits>>
     _ ->
-      case int.compare(syn_type, syn_look_change) {
+      id_bytes
+      |> bit_array.append(case int.compare(syn_type, syn_look_change) {
         order.Eq ->
           look_item_show(option.unwrap(
             li.item_show,
@@ -145,7 +148,7 @@ fn look_item(li: LookItem, syn_type: Int) -> BitArray {
             }
           })
         }
-      }
+      })
   }
 }
 
