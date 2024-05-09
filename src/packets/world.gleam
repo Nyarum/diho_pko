@@ -521,7 +521,6 @@ pub type World {
     kitbag_lock: Int,
     enter_type: Int,
     is_new_char: Int,
-    // map len
     map_name: String,
     can_team: Int,
     character_base: Base,
@@ -530,7 +529,6 @@ pub type World {
     character_attribute: Attributes,
     character_kitbag: Kitbag,
     character_shortcut: Shortcuts,
-    // boat len
     character_boat: List(Boat),
     cha_main_id: Int,
   )
@@ -544,6 +542,7 @@ pub fn world(world: World) -> Pack {
     })
 
   <<
+    516:16,
     world.enter_ret:16,
     world.auto_lock:8,
     world.kitbag_lock:8,
