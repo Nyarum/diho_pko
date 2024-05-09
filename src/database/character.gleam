@@ -44,3 +44,11 @@ pub fn get_characters(db: pgo.Connection, account_id: Int) {
 
   let assert Ok(_) = pgo.execute(sql, db, [pgo.int(account_id)], return_type)
 }
+
+pub fn remove_character(db: pgo.Connection, account_id: Int, char_name: String) {
+  let sql = "DELETE FROM characters WHERE account_id = $1 AND name = $2"
+
+  let args: List(Value) = [pgo.int(account_id), pgo.text(char_name)]
+
+  let assert Ok(_) = pgo.execute(sql, db, args, dynamic.dynamic)
+}

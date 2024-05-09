@@ -153,12 +153,53 @@ fn process_packet(ctx: Context, conn) -> Result(Context, Errors) {
           }
         }
         435 -> {
-          io.debug(bit_array.byte_size(next))
           create_character.handle(ctx, _)
           |> Unpack(next, _)
           |> create_character.create_character
           |> Buf
           |> Ok
+        }
+        346 -> {
+          let pincode_handle =
+            auth.pincode_handle(ctx, _)
+            |> Unpack(next, _)
+            |> auth.pincode
+
+          case pincode_handle {
+            Ok(buf) -> Ok(Buf(buf))
+            Error(err) -> {
+              io.debug(err)
+              Error(CantHandle)
+            }
+          }
+        }
+        347 -> {
+          let change_pincode_handle =
+            auth.change_pincode_handle(ctx, _)
+            |> Unpack(next, _)
+            |> auth.change_pincode
+
+          case change_pincode_handle {
+            Ok(buf) -> Ok(Buf(buf))
+            Error(err) -> {
+              io.debug(err)
+              Error(CantHandle)
+            }
+          }
+        }
+        436 -> {
+          let remove_character_handler =
+            auth.remove_character_handle(ctx, _)
+            |> Unpack(next, _)
+            |> auth.remove_character
+
+          case remove_character_handler {
+            Ok(buf) -> Ok(Buf(buf))
+            Error(err) -> {
+              io.debug(err)
+              Error(CantHandle)
+            }
+          }
         }
         432 -> {
           io.debug("account exited")
