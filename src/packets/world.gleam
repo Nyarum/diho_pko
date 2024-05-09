@@ -7,11 +7,14 @@ import gleam/bit_array
 import gleam/bool
 import gleam/dict.{type Dict}
 import gleam/dynamic.{type Dynamic}
+import gleam/int
 import gleam/io
 import gleam/list
 import gleam/option.{type Option}
+import gleam/order
 import gleam/pgo.{type Returned, Returned}
 import gleam/result.{try, unwrap}
+import gleam/string
 import packets/character_screen.{type Character, Character}
 import packets/dto.{type Auth, type InstAttr, Auth}
 
@@ -20,23 +23,45 @@ pub type Error {
   CantGetAccountID
 }
 
-type Position {
+pub type Position {
   Position(x: Int, y: Int, radius: Int)
 }
 
-type Side {
-  Side(side_id: Int)
+fn position(pos: Position) -> BitArray {
+  <<pos.x:32, pos.y:32, pos.radius:32>>
 }
 
-type EntityEvent {
+pub type Side {
+  Side(id: Int)
+}
+
+fn side(side: Side) -> BitArray {
+  <<side.id:8>>
+}
+
+pub type EntityEvent {
   EntityEvent(id: Int, value: Int, event_id: Int, event_name: String)
 }
 
-type LookItemSync {
+fn entity_event(ee: EntityEvent) -> BitArray {
+  <<
+    ee.id:32,
+    ee.value:8,
+    ee.event_id:16,
+    string.byte_size(ee.event_name):16,
+    ee.event_name:utf8,
+  >>
+}
+
+pub type LookItemSync {
   LookItemSync(endure: Int, energy: Int, is_valid: Int)
 }
 
-type LookItemShow {
+fn look_item_sync(li: LookItemSync) -> BitArray {
+  <<li.endure:16, li.energy:16, li.is_valid:8>>
+}
+
+pub type LookItemShow {
   LookItemShow(
     num: Int,
     endure: List(Int),
@@ -46,7 +71,29 @@ type LookItemShow {
   )
 }
 
-type LookItem {
+fn look_item_show(li: LookItemShow) -> BitArray {
+  let endure_bytes =
+    list.fold(li.endure, <<>>, fn(acc, one) {
+      acc
+      |> bit_array.append(<<one:16>>)
+    })
+
+  let energy_bytes =
+    list.fold(li.energy, <<>>, fn(acc, one) {
+      acc
+      |> bit_array.append(<<one:16>>)
+    })
+
+  <<
+    li.num:16,
+    endure_bytes:bits,
+    energy_bytes:bits,
+    li.forge_lv:8,
+    li.is_valid:8,
+  >>
+}
+
+pub type LookItem {
   LookItem(
     id: Int,
     item_sync: Option(LookItemSync),
@@ -58,11 +105,65 @@ type LookItem {
   )
 }
 
-type LookHuman {
+const syn_look_switch = 0
+
+const syn_look_change = 1
+
+fn look_item(li: LookItem, syn_type: Int) -> BitArray {
+  case li.id {
+    0 -> <<>>
+    _ ->
+      case int.compare(syn_type, syn_look_change) {
+        order.Eq ->
+          look_item_show(option.unwrap(
+            li.item_show,
+            LookItemShow(0, [], [], 0, 0),
+          ))
+        _ -> {
+          look_item_sync(option.unwrap(li.item_sync, LookItemSync(0, 0, 0)))
+          |> bit_array.append(<<li.is_db_params:8>>)
+          |> bit_array.append(case li.is_db_params {
+            0 -> <<>>
+            _ -> {
+              list.fold(li.db_params, <<>>, fn(acc, one) {
+                acc
+                |> bit_array.append(<<one:32>>)
+              })
+              |> bit_array.append(<<li.is_inst_attrs:8>>)
+              |> bit_array.append(case li.is_inst_attrs {
+                0 -> <<>>
+                _ -> {
+                  list.fold(li.inst_attrs, <<>>, fn(acc, one_inst_attr) {
+                    acc
+                    |> bit_array.append(<<
+                      one_inst_attr.id:little-16,
+                      one_inst_attr.value:little-16,
+                    >>)
+                  })
+                }
+              })
+            }
+          })
+        }
+      }
+  }
+}
+
+pub type LookHuman {
   LookHuman(hair_id: Int, item_grids: List(LookItem))
 }
 
-type LookBoat {
+fn look_human(human: LookHuman, syn_type: Int) -> BitArray {
+  let item_grids_bytes =
+    list.fold(human.item_grids, <<>>, fn(acc, one) {
+      acc
+      |> bit_array.append(look_item(one, syn_type))
+    })
+
+  <<human.hair_id:16, item_grids_bytes:bits>>
+}
+
+pub type LookBoat {
   LookBoat(
     pos_id: Int,
     boat_id: Int,
@@ -74,7 +175,19 @@ type LookBoat {
   )
 }
 
-type Look {
+fn look_boat(boat: LookBoat) -> BitArray {
+  <<
+    boat.pos_id:16,
+    boat.boat_id:16,
+    boat.header:16,
+    boat.body:16,
+    boat.engine:16,
+    boat.cannon:16,
+    boat.equipment:16,
+  >>
+}
+
+pub type Look {
   Look(
     syn_type: Int,
     type_id: Int,
@@ -84,11 +197,24 @@ type Look {
   )
 }
 
-type LookAppend {
+fn look(look: Look) -> BitArray {
+  let boat_or_human_bytes = case look.is_boat {
+    1 -> look_boat(option.unwrap(look.boat, LookBoat(0, 0, 0, 0, 0, 0, 0)))
+    _ -> look_human(option.unwrap(look.human, LookHuman(0, [])), look.syn_type)
+  }
+
+  <<look.syn_type:8, look.type_id:16, look.is_boat:8, boat_or_human_bytes:bits>>
+}
+
+pub type LookAppend {
   LookAppend(look_id: Int, is_valid: Int)
 }
 
-type Base {
+fn look_append(look_append: LookAppend) -> BitArray {
+  <<look_append.look_id:16, look_append.is_valid:8>>
+}
+
+pub type Base {
   Base(
     cha_id: Int,
     world_id: Int,
@@ -116,7 +242,52 @@ type Base {
   )
 }
 
-type Skill {
+fn base(base: Base) -> BitArray {
+  let side_bytes = side(base.side)
+  let position_bytes = position(base.position)
+  let entity_event_bytes = entity_event(base.entity_event)
+  let look_bytes = look(base.look)
+
+  let look_append_bytes =
+    list.fold(base.look_append, <<>>, fn(acc, one) {
+      acc
+      |> bit_array.append(look_append(one))
+    })
+
+  <<
+    base.cha_id:32,
+    base.world_id:32,
+    base.comm_id:32,
+    string.byte_size(base.comm_name):16,
+    base.comm_name:utf8,
+    base.gm_lvl:8,
+    base.handle:32,
+    base.ctrl_type:8,
+    string.byte_size(base.name):16,
+    base.name:utf8,
+    string.byte_size(base.motto_name):16,
+    base.motto_name:utf8,
+    base.icon:16,
+    base.guild_id:32,
+    string.byte_size(base.guild_name):16,
+    base.guild_name:utf8,
+    string.byte_size(base.guild_motto):16,
+    base.guild_motto:utf8,
+    string.byte_size(base.stall_name):16,
+    base.stall_name:utf8,
+    base.state:16,
+    position_bytes:bits,
+    base.angle:16,
+    base.team_leader_id:32,
+    side_bytes:bits,
+    entity_event_bytes:bits,
+    look_bytes:bits,
+    base.pk_ctrl:8,
+    look_append_bytes:bits,
+  >>
+}
+
+pub type Skill {
   Skill(
     id: Int,
     state: Int,
@@ -130,27 +301,90 @@ type Skill {
   )
 }
 
-type SkillBag {
+fn skill(skill: Skill) -> BitArray {
+  let params_bytes =
+    list.fold(skill.params, <<>>, fn(acc, one) {
+      acc
+      |> bit_array.append(<<one:16>>)
+    })
+
+  <<
+    skill.id:16,
+    skill.state:8,
+    skill.level:8,
+    skill.use_sp:16,
+    skill.use_endure:16,
+    skill.use_energy:16,
+    skill.resume_time:32,
+    skill.range_type:16,
+    params_bytes:bits,
+  >>
+}
+
+pub type SkillBag {
   SkillBag(skill_id: Int, value_type: Int, skill_num: Int, skills: List(Skill))
 }
 
-type SkillState {
+fn skill_bag(skill_bag: SkillBag) -> BitArray {
+  let skills_bytes =
+    list.fold(skill_bag.skills, <<>>, fn(acc, one) {
+      acc
+      |> bit_array.append(skill(one))
+    })
+
+  <<
+    skill_bag.skill_id:16,
+    skill_bag.value_type:8,
+    skill_bag.skill_num:16,
+    skills_bytes:bits,
+  >>
+}
+
+pub type SkillState {
   SkillState(id: Int, level: Int)
 }
 
-type SkillStates {
+fn skill_state(skill_state: SkillState) -> BitArray {
+  <<skill_state.id:8, skill_state.level:8>>
+}
+
+pub type SkillStates {
   SkillStates(len: Int, states: List(SkillState))
 }
 
-type Attribute {
+fn skill_states(skill_states: SkillStates) -> BitArray {
+  let states_bytes =
+    list.fold(skill_states.states, <<>>, fn(acc, one) {
+      acc
+      |> bit_array.append(skill_state(one))
+    })
+
+  <<skill_states.len:8, states_bytes:bits>>
+}
+
+pub type Attribute {
   Attribute(id: Int, value: Int)
 }
 
-type Attributes {
-  Attributes(id: Int, num: Int, attrs: List(Attribute))
+fn attribute(attribute: Attribute) -> BitArray {
+  <<attribute.id:16, attribute.value:16>>
 }
 
-type KitbagItem {
+pub type Attributes {
+  Attributes(value_type: Int, num: Int, attrs: List(Attribute))
+}
+
+fn attributes(attributes: Attributes) -> BitArray {
+  let attrs_bytes =
+    list.fold(attributes.attrs, <<>>, fn(acc, one) {
+      acc
+      |> bit_array.append(attribute(one))
+    })
+
+  <<attributes.value_type:8, attributes.num:16, attrs_bytes:bits>>
+}
+
+pub type KitbagItem {
   KitbagItem(
     grid_id: Int,
     id: Int,
@@ -166,19 +400,98 @@ type KitbagItem {
   )
 }
 
-type Kitbag {
+const boat_id = 3988
+
+fn kitbag_item(kitbag_item: KitbagItem) -> BitArray {
+  let grid_id = <<kitbag_item.grid_id:16>>
+
+  case kitbag_item.grid_id {
+    65_535 -> grid_id
+    _ -> {
+      let id_bytes =
+        grid_id
+        |> bit_array.append(<<kitbag_item.id:16>>)
+
+      case int.compare(kitbag_item.id, 0) {
+        order.Gt -> {
+          let first_bytes =
+            id_bytes
+            |> bit_array.append(<<kitbag_item.num:16>>)
+            |> bit_array.append(
+              list.fold(kitbag_item.endure, <<>>, fn(acc, one) {
+                acc
+                |> bit_array.append(<<one:16>>)
+              }),
+            )
+            |> bit_array.append(
+              list.fold(kitbag_item.energy, <<>>, fn(acc, one) {
+                acc
+                |> bit_array.append(<<one:16>>)
+              }),
+            )
+            |> bit_array.append(<<
+              kitbag_item.forge_lv:8,
+              bool.to_int(kitbag_item.is_valid):8,
+            >>)
+            |> bit_array.append(case int.compare(kitbag_item.id, boat_id) {
+              order.Eq -> <<kitbag_item.item_db_inst_id:32>>
+              _ -> <<>>
+            })
+            |> bit_array.append(<<kitbag_item.item_db_forge:32>>)
+            |> bit_array.append(case int.compare(kitbag_item.id, boat_id) {
+              order.Eq -> <<0:32>>
+              _ -> <<kitbag_item.item_db_inst_id:32>>
+            })
+            |> bit_array.append(<<bool.to_int(kitbag_item.is_params):8>>)
+            |> bit_array.append(case bool.compare(kitbag_item.is_params, True) {
+              order.Eq ->
+                list.fold(kitbag_item.inst_attrs, <<>>, fn(acc, one) {
+                  acc
+                  |> bit_array.append(<<one.id:16, one.value:16>>)
+                })
+              _ -> <<>>
+            })
+        }
+        _ -> id_bytes
+      }
+    }
+  }
+}
+
+pub type Kitbag {
   Kitbag(value_type: Int, num: Int, items: List(KitbagItem))
 }
 
-type Shortcut {
+fn kitbag(kitbag: Kitbag) -> BitArray {
+  let items_bytes =
+    list.fold(kitbag.items, <<>>, fn(acc, one) {
+      acc
+      |> bit_array.append(kitbag_item(one))
+    })
+
+  <<kitbag.value_type:8, kitbag.num:16, items_bytes:bits>>
+}
+
+pub type Shortcut {
   Shortcut(value_type: Int, grid_id: Int)
 }
 
-type Shortcuts {
+fn shortcut(shortcut: Shortcut) -> BitArray {
+  <<shortcut.value_type:8, shortcut.grid_id:16>>
+}
+
+pub type Shortcuts {
   Shortcuts(items: List(Shortcut))
 }
 
-type Boat {
+fn shortcuts(shortcuts: Shortcuts) -> BitArray {
+  list.fold(shortcuts.items, <<>>, fn(acc, one) {
+    acc
+    |> bit_array.append(shortcut(one))
+  })
+}
+
+pub type Boat {
   Boat(
     base: Base,
     attribute: Attributes,
@@ -187,7 +500,21 @@ type Boat {
   )
 }
 
-type World {
+fn boat(boat: Boat) -> BitArray {
+  let base_bytes = base(boat.base)
+  let attribute_bytes = attributes(boat.attribute)
+  let kitbag_bytes = kitbag(boat.kitbag)
+  let skill_state_bytes = skill_states(boat.skill_state)
+
+  <<
+    base_bytes:bits,
+    attribute_bytes:bits,
+    kitbag_bytes:bits,
+    skill_state_bytes:bits,
+  >>
+}
+
+pub type World {
   World(
     enter_ret: Int,
     auto_lock: Int,
@@ -207,6 +534,35 @@ type World {
     character_boat: List(Boat),
     cha_main_id: Int,
   )
+}
+
+pub fn world(world: World) -> Pack {
+  let character_boat_bytes =
+    list.fold(world.character_boat, <<>>, fn(acc, one) {
+      acc
+      |> bit_array.append(boat(one))
+    })
+
+  <<
+    world.enter_ret:16,
+    world.auto_lock:8,
+    world.kitbag_lock:8,
+    world.enter_type:8,
+    world.is_new_char:8,
+    string.byte_size(world.map_name):16,
+    world.map_name:utf8,
+    world.can_team:8,
+    base(world.character_base):bits,
+    skill_bag(world.character_skill_bag):bits,
+    skill_states(world.character_skill_state):bits,
+    attributes(world.character_attribute):bits,
+    kitbag(world.character_kitbag):bits,
+    shortcuts(world.character_shortcut):bits,
+    list.length(world.character_boat):8,
+    character_boat_bytes:bits,
+    world.cha_main_id:32,
+  >>
+  |> Pack
 }
 
 pub fn pincode_confirm() -> Pack {
