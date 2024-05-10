@@ -222,7 +222,7 @@ fn process_packet(ctx: Context, conn) -> Result(Context, Errors) {
         }
         _ -> {
           io.debug("unknown opcode")
-          Error(NotFoundOpcode)
+          Ok(Buf(<<>>))
         }
       }
 

@@ -48,8 +48,7 @@ fn entity_event(ee: EntityEvent) -> BitArray {
     ee.id:32,
     ee.value:8,
     ee.event_id:16,
-    string.byte_size(ee.event_name):16,
-    ee.event_name:utf8,
+    encode_string_with_null(ee.event_name):bits,
   >>
 }
 
@@ -265,23 +264,17 @@ fn base(base: Base) -> BitArray {
     base.cha_id:32,
     base.world_id:32,
     base.comm_id:32,
-    string.byte_size(base.comm_name):16,
-    base.comm_name:utf8,
+    encode_string_with_null(base.comm_name):bits,
     base.gm_lvl:8,
     base.handle:32,
     base.ctrl_type:8,
-    string.byte_size(base.name):16,
-    base.name:utf8,
-    string.byte_size(base.motto_name):16,
-    base.motto_name:utf8,
+    encode_string_with_null(base.name):bits,
+    encode_string_with_null(base.motto_name):bits,
     base.icon:16,
     base.guild_id:32,
-    string.byte_size(base.guild_name):16,
-    base.guild_name:utf8,
-    string.byte_size(base.guild_motto):16,
-    base.guild_motto:utf8,
-    string.byte_size(base.stall_name):16,
-    base.stall_name:utf8,
+    encode_string_with_null(base.guild_name):bits,
+    encode_string_with_null(base.guild_motto):bits,
+    encode_string_with_null(base.stall_name):bits,
     base.state:16,
     position_bytes:bits,
     base.angle:16,
@@ -541,6 +534,14 @@ pub type World {
   )
 }
 
+fn encode_string_with_null(str: String) -> BitArray {
+  let new_string =
+    bit_array.from_string(str)
+    |> bit_array.append(<<0x00>>)
+
+  <<bit_array.byte_size(new_string):16, new_string:bits>>
+}
+
 pub fn world(world: World) -> Pack {
   let character_boat_bytes =
     list.fold(world.character_boat, <<>>, fn(acc, one) {
@@ -555,8 +556,7 @@ pub fn world(world: World) -> Pack {
     world.kitbag_lock:8,
     world.enter_type:8,
     world.is_new_char:8,
-    string.byte_size(world.map_name):16,
-    world.map_name:utf8,
+    encode_string_with_null(world.map_name):bits,
     world.can_team:8,
     base(world.character_base):bits,
     skill_bag(world.character_skill_bag):bits,
@@ -613,13 +613,17 @@ pub fn enter_game_handle(ctx: Context, enter_game: EnterGame) -> BitArray {
     list.repeat(Attribute(0, 0), 74)
     |> list.index_map(fn(attr, index) { Attribute(index, 1) })
 
-  let kitbag_items_len = 1
+  let kitbag_items_len = 24
 
   let kitbag_items =
     list.repeat(
-      KitbagItem(65_535, 0, 0, [], [], 0, False, 0, 0, False, []),
+      KitbagItem(0, 0, 0, [], [], 0, False, 0, 0, False, []),
       kitbag_items_len,
     )
+    |> list.index_map(fn(attr, index) {
+      KitbagItem(index, 0, 0, [], [], 0, False, 0, 0, False, [])
+    })
+    |> list.append([KitbagItem(65_535, 0, 0, [], [], 0, False, 0, 0, False, [])])
 
   let shortcuts = list.repeat(Shortcut(0, 0), 36)
 
