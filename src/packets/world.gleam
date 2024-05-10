@@ -214,7 +214,11 @@ pub type LookAppend {
 }
 
 fn look_append(look_append: LookAppend) -> BitArray {
-  <<look_append.look_id:16, look_append.is_valid:8>>
+  <<look_append.look_id:16>>
+  |> bit_array.append(case int.compare(look_append.look_id, 0) {
+    order.Eq -> <<>>
+    _ -> <<look_append.is_valid:8>>
+  })
 }
 
 pub type Base {
@@ -609,8 +613,13 @@ pub fn enter_game_handle(ctx: Context, enter_game: EnterGame) -> BitArray {
     list.repeat(Attribute(0, 0), 74)
     |> list.index_map(fn(attr, index) { Attribute(index, 1) })
 
+  let kitbag_items_len = 1
+
   let kitbag_items =
-    list.repeat(KitbagItem(65_535, 0, 0, [], [], 0, False, 0, 0, False, []), 24)
+    list.repeat(
+      KitbagItem(65_535, 0, 0, [], [], 0, False, 0, 0, False, []),
+      kitbag_items_len,
+    )
 
   let shortcuts = list.repeat(Shortcut(0, 0), 36)
 
@@ -647,10 +656,10 @@ pub fn enter_game_handle(ctx: Context, enter_game: EnterGame) -> BitArray {
       0,
       look_appends,
     ),
-    SkillBag(36, 0, 9, skills),
+    SkillBag(36, 0, 0, []),
     SkillStates(0, []),
-    Attributes(0, 74, attributes),
-    Kitbag(0, 24, kitbag_items),
+    Attributes(0, 0, []),
+    Kitbag(0, kitbag_items_len, kitbag_items),
     Shortcuts(shortcuts),
     [],
     10_271,
