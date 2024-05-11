@@ -3,6 +3,7 @@ import bytes/packet.{type Pack, type Unpack, Pack, Unpack}
 import core/context.{type Context, Context}
 import database/account
 import database/character
+import database/local
 import gleam/bit_array
 import gleam/bool
 import gleam/int
@@ -193,12 +194,17 @@ pub fn create_character_reply() -> Pack {
 }
 
 pub fn handle(ctx: Context, cc: CreateCharacter) -> BitArray {
-  let assert Context(db, _, _, account_id) = ctx
+  let assert Context(storage, _, _, account_id) = ctx
 
   io.debug("handle create character")
   io.debug(account_id)
 
-  let assert Ok(_) = io.debug(character.create_character(db, account_id, cc))
+  let assert Ok(_) =
+    local.save_character(
+      storage,
+      account_id,
+      local.Character("", account_id, cc.name, cc.map, cc.look),
+    )
 
   create_character_reply()
   |> pack

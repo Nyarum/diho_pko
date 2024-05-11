@@ -3,11 +3,13 @@ import bytes/packet.{type Pack, type Unpack, Pack, Unpack}
 import core/context.{type Context, Context}
 import database/account.{Account}
 import database/character
+import database/local
 import gleam/bit_array
 import gleam/bool
 import gleam/dict.{type Dict}
 import gleam/dynamic.{type Dynamic}
 import gleam/io
+import gleam/json
 import gleam/list
 import gleam/option
 import gleam/pgo.{type Returned, Returned}
@@ -60,7 +62,7 @@ pub fn auth(unpack: Unpack(Auth, AuthResp)) -> Result(AuthResp, Error) {
 }
 
 pub type AuthResp {
-  AuthResp(buf: BitArray, account_id: Int)
+  AuthResp(buf: BitArray, account_id: String)
 }
 
 pub fn get_account_id(
@@ -97,42 +99,41 @@ fn parse_account(x: Dynamic) {
 }
 
 pub fn handle(ctx: Context, auth: Auth) -> AuthResp {
-  let assert Context(db, _, _, _) = ctx
+  let assert Context(storage, _, _, _) = ctx
 
-  let assert Ok(account_return) = account.get_account(db, auth.login)
-  let assert Returned(count, account) = account_return
-
-  let account_id = case count {
-    0 -> {
-      let assert Ok(create_account) = account.create_account(db, auth)
-      let assert Returned(_, create_account_rows) = create_account
-      let assert Ok(create_account_one) = list.first(create_account_rows)
-
-      create_account_one
+  let account = case local.get_account(storage, auth.login) {
+    Ok(account) -> {
+      account
     }
     _ -> {
-      let assert Ok(final_account) = list.first(account)
-      final_account.id
+      let assert Ok(account) =
+        local.save_account(
+          storage,
+          local.Account(
+            "",
+            auth.login,
+            auth.password,
+            auth.mac,
+            auth.is_cheat,
+            auth.client_version,
+            option.None,
+            [],
+          ),
+        )
+
+      account
     }
-  }
-
-  let assert Ok(get_characters) = character.get_characters(db, account_id)
-
-  let characters = case get_characters {
-    Returned(_, characters) -> characters
   }
 
   let characters_format = {
-    use character <- list.map(characters)
-    let #(id, account_id, name, map, look, hair) = character
-    let assert Ok(look) = dto.json_to_look(look)
-    Character(True, name, "Job", map, 1, 0, look)
+    use character <- list.map(account.characters)
+    Character(True, character.name, "Job", character.map, 1, 0, character.look)
   }
 
   io.debug(characters_format)
 
-  let is_pincode = case list.first(account) {
-    Ok(acc) -> bool.to_int(!option.is_none(acc.pincode))
+  let is_pincode = case account.pincode {
+    option.Some(_) -> 1
     _ -> 0
   }
 
@@ -149,7 +150,7 @@ pub fn handle(ctx: Context, auth: Auth) -> AuthResp {
   |> character_screen.character_screen
   |> pack.pack()
   |> io.debug
-  |> AuthResp(account_id)
+  |> AuthResp(account.id)
 }
 
 pub type Pincode {
@@ -205,24 +206,24 @@ pub fn change_pincode(
 }
 
 pub fn pincode_handle(ctx: Context, pincode: Pincode) -> BitArray {
-  let assert Context(db, _, _, account_id) = ctx
-  let assert Ok(_) = account.update_pincode(db, pincode.hash, account_id)
+  let assert Context(storage, _, _, account_id) = ctx
+  local.update_pincode(storage, account_id, pincode.hash)
 
-  pincode_confirm()
+  pincode_confirm(941)
   |> pack.pack()
 }
 
 pub fn change_pincode_handle(ctx: Context, pincode: ChangePincode) -> BitArray {
-  let assert Context(db, _, _, account_id) = ctx
-  let assert Ok(_) = account.update_pincode(db, pincode.hash, account_id)
+  let assert Context(storage, _, _, account_id) = ctx
+  local.update_pincode(storage, account_id, pincode.hash)
 
-  pincode_confirm()
+  pincode_confirm(942)
   |> pack.pack()
 }
 
-pub fn pincode_confirm() -> Pack {
+pub fn pincode_confirm(opcode: Int) -> Pack {
   let prefinal_bytes =
-    <<942:size(16)>>
+    <<opcode:size(16)>>
     |> bit_array.append(<<0x00, 0x00>>)
 
   Pack(prefinal_bytes)
@@ -265,9 +266,8 @@ pub fn remove_character_handle(
   ctx: Context,
   remove_character: RemoveCharacter,
 ) -> BitArray {
-  let assert Context(db, _, _, account_id) = ctx
-  let assert Ok(_) =
-    character.remove_character(db, account_id, remove_character.name)
+  let assert Context(storage, _, _, account_id) = ctx
+  local.remove_character(storage, account_id, remove_character.name)
 
   remove_character_confirm()
   |> pack.pack()

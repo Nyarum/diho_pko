@@ -1,12 +1,14 @@
 import bytes/pack
 import bytes/packet.{Unpack}
 import core/context.{type Context, Context}
+import database/local
 import gleam/bit_array
 import gleam/bytes_builder
-import gleam/erlang/process.{Normal}
+import gleam/erlang/process.{type Subject, Normal}
 import gleam/float
 import gleam/int
 import gleam/io
+import gleam/json.{type Json, to_string}
 import gleam/option.{None}
 import gleam/order
 import gleam/otp/actor
@@ -27,24 +29,8 @@ type Errors {
   CantHandle
 }
 
-fn ttt() {
-  use val <- result.try(float.divide(1.0, 0.01))
-  io.println(float.to_string(val))
-  Ok(val)
-}
-
 pub fn main() {
-  let db =
-    pgo.connect(
-      pgo.Config(
-        ..pgo.default_config(),
-        host: "127.0.0.1",
-        database: "postgres",
-        user: "postgres",
-        password: option.Some("example"),
-        pool_size: 15,
-      ),
-    )
+  let storage = local.storage()
 
   let assert Ok(_) =
     glisten.handler(
@@ -58,7 +44,7 @@ pub fn main() {
         let assert Ok(_) =
           bytes_builder.from_bit_array(first_date_pack)
           |> glisten.send(conn, _)
-        #(Context(db, <<>>, 0, 0), None)
+        #(Context(storage, <<>>, 0, ""), None)
       },
       fn(msg, state, conn) {
         let assert Packet(msg) = msg
@@ -75,7 +61,7 @@ pub fn main() {
 
         let new_state =
           Context(
-            db,
+            storage,
             state.buf
               |> bit_array.append(msg),
             len_pkt,
@@ -111,7 +97,7 @@ pub fn main() {
 }
 
 type BufOrData {
-  Data(buf: BitArray, account_id: Int)
+  Data(buf: BitArray, account_id: String)
   Buf(buf: BitArray)
 }
 
