@@ -2,6 +2,8 @@ import bytes/pack
 import bytes/packet.{Unpack}
 import core/context.{type Context, Context}
 import database/local
+import database/periodic_save
+import database/postgres
 import gleam/bit_array
 import gleam/bytes_builder
 import gleam/erlang/process.{type Subject, Normal}
@@ -12,7 +14,7 @@ import gleam/json.{type Json, to_string}
 import gleam/option.{None}
 import gleam/order
 import gleam/otp/actor
-import gleam/pgo
+import gleam/pgo.{type Returned, Returned}
 import gleam/result
 import gleam/string
 import glisten.{Packet}
@@ -30,7 +32,31 @@ type Errors {
 }
 
 pub fn main() {
+  let db =
+    pgo.connect(
+      pgo.Config(
+        ..pgo.default_config(),
+        host: "127.0.0.1",
+        database: "postgres",
+        user: "postgres",
+        password: option.Some("example"),
+        pool_size: 15,
+      ),
+    )
+
+  let assert Ok(get_storage) = postgres.get_storage(db)
+  let assert Returned(_, [first_data]) = get_storage
+  let assert #(_, data) = first_data
+
   let storage = local.storage()
+  local.init(storage, data)
+
+  let assert Ok(_) =
+    periodic_save.periodic_save_to_database(1000, fn() {
+      let current_state = local.get_current_state(storage)
+      let assert Ok(_) = postgres.upsert_storage(db, current_state)
+      Nil
+    })
 
   let assert Ok(_) =
     glisten.handler(

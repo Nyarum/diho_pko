@@ -1,8 +1,6 @@
 import bytes/pack.{pack}
 import bytes/packet.{type Pack, type Unpack, Pack, Unpack}
 import core/context.{type Context, Context}
-import database/account.{Account}
-import database/character
 import database/local
 import gleam/bit_array
 import gleam/bool
