@@ -4,3 +4,5 @@ CREATE TABLE "public"."storage" (
 ) WITH (oids = false);
 
 CREATE UNIQUE INDEX storage_idx on storage (id) WHERE (id):
+
+INSERT INTO storage VALUES (1, "")
